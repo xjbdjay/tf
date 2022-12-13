@@ -56,16 +56,21 @@ module "eks_blueprints" {
   private_subnet_ids = module.vpc.private_subnets
 
   managed_node_groups = {
-    mg_5 = {
-      node_group_name = "managed-ondemand"
+    mg_2 = {
+      node_group_name = "managed-ondemand-2"
       instance_types  = ["m5.large"]
       min_size        = 3
-      max_size        = 3
+      max_size        = 10
       desired_size    = 3
       subnet_ids      = module.vpc.public_subnets
+      create_launch_template = true
+      public_ip = true
+      launch_template_tags = {
+        Name      = "eks-${local.cluster_name}"
+        Group = "mg_node_2"
+      }
     }
   }
-
   tags = local.tags
 }
 
@@ -115,6 +120,17 @@ module "eks_blueprints_kubernetes_addons" {
   }
   # TODO - requires dependency on `cert-manager` for namespace
   # enable_cert_manager_csi_driver = true
+
+  enable_cluster_autoscaler = true
+  cluster_autoscaler_helm_config = {
+    set = [
+      {
+        name  = "podLabels.prometheus\\.io/scrape",
+        value = "true",
+        type  = "string",
+      }
+    ]
+  }
 
   tags = local.tags
 }
