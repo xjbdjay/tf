@@ -42,6 +42,19 @@ locals {
   }
 }
 
+resource "aws_security_group" "node_group_communicate" {
+  name_prefix = local.cluster_name
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    protocol  = "-1"
+    from_port = 0
+    to_port = 0
+    self = true
+  }
+}
+
+
 #---------------------------------------------------------------
 # EKS Blueprints
 #---------------------------------------------------------------
@@ -71,6 +84,8 @@ module "eks_blueprints" {
       }
     }
   }
+  worker_additional_security_group_ids = [module.eks_blueprints.cluster_primary_security_group_id]
+  # worker_additional_security_group_ids = [module.eks_blueprints.cluster_primary_security_group_id, aws_security_group.node_group_communicate.id]
   tags = local.tags
 }
 
