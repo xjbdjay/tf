@@ -72,12 +72,35 @@ module "eks_blueprints" {
     mg_2 = {
       node_group_name = "managed-ondemand-2"
       instance_types  = ["m5.large"]
+      capacity_type = "SPOT"
       min_size        = 3
-      max_size        = 10
+      max_size        = 3
       desired_size    = 3
       subnet_ids      = module.vpc.public_subnets
       create_launch_template = true
       public_ip = true
+      k8s_labels = {
+        category = "static"
+      }
+      launch_template_tags = {
+        Name      = "eks-${local.cluster_name}"
+        Group = "mg_node_2"
+      }
+    }
+
+    mg_3 = {
+      node_group_name = "managed-ondemand-computing"
+      instance_types  = ["m5.large"]
+      capacity_type = "SPOT"
+      min_size        = 0
+      max_size        = 10
+      desired_size    = 0
+      subnet_ids      = module.vpc.public_subnets
+      create_launch_template = true
+      public_ip = true
+      k8s_labels = {
+        category = "dynamic"
+      }
       launch_template_tags = {
         Name      = "eks-${local.cluster_name}"
         Group = "mg_node_2"
