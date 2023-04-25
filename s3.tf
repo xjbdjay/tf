@@ -1,3 +1,7 @@
+locals {
+  eks_oidc_issuer_url = replace(module.eks_blueprints.eks_oidc_provider_arn, "/^(.*provider/)/", "")
+}
+
 resource "aws_iam_role" "s3_role" {
   name        = format("%s-%s", module.eks_blueprints.eks_cluster_id, "irsa")
   # Terraform's "jsonencode" function converts a
@@ -13,10 +17,10 @@ resource "aws_iam_role" "s3_role" {
         }
         Condition = {
           StringLike = {
-            "oidc.eks.cn-north-1.amazonaws.com.cn/id/F3FBBFA3747271100017387E04494B5C:sub" = "system:serviceaccount:*"
+            "${local.eks_oidc_issuer_url}:sub" = "system:serviceaccount:*"
           }
           StringEquals = {
-            "oidc.eks.cn-north-1.amazonaws.com.cn/id/F3FBBFA3747271100017387E04494B5C:aud" = "sts.amazonaws.com"
+            "${local.eks_oidc_issuer_url}:aud" = "sts.amazonaws.com"
           }
         }
       },
@@ -32,6 +36,13 @@ resource "aws_iam_role_policy" "s3_policy" {
       {
         Action = [
           "s3:*",
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      },
+      {
+        Action = [
+          "ecr:*",
         ]
         Effect   = "Allow"
         Resource = "*"

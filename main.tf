@@ -42,19 +42,6 @@ locals {
   }
 }
 
-resource "aws_security_group" "node_group_communicate" {
-  name_prefix = local.cluster_name
-  vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    protocol  = "-1"
-    from_port = 0
-    to_port = 0
-    self = true
-  }
-}
-
-
 #---------------------------------------------------------------
 # EKS Blueprints
 #---------------------------------------------------------------
@@ -63,22 +50,27 @@ module "eks_blueprints" {
   source = "github.com/xjbdjay/terraform-aws-eks-blueprints"
 
   cluster_name    = local.cluster_name
-  cluster_version = "1.23"
+  cluster_version = "1.25"
 
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnets
+  cluster_endpoint_private_access = true
+# loadbalancer need one security_group_tags with this tag
+  node_security_group_tags = {
+    "kubernetes.io/cluster/${local.cluster_name}" = null
+  }
 
   managed_node_groups = {
     mg_2 = {
       node_group_name = "managed-ondemand-2"
       instance_types  = ["m5.large"]
-      capacity_type = "SPOT"
+      # capacity_type = "SPOT"
       min_size        = 3
-      max_size        = 3
+      max_size        = 10
       desired_size    = 3
-      subnet_ids      = module.vpc.public_subnets
+      subnet_ids      = module.vpc.private_subnets
       create_launch_template = true
-      public_ip = true
+      # public_ip = true
       k8s_labels = {
         category = "static"
       }
@@ -87,41 +79,28 @@ module "eks_blueprints" {
         Group = "mg_node_2"
       }
     }
-
-    mg_3 = {
-      node_group_name = "managed-ondemand-computing"
-      instance_types  = ["m5.large"]
-      capacity_type = "SPOT"
-      min_size        = 0
-      max_size        = 10
-      desired_size    = 0
-      subnet_ids      = module.vpc.public_subnets
-      create_launch_template = true
-      public_ip = true
-      k8s_labels = {
-        category = "dynamic"
-      }
-      launch_template_tags = {
-        Name      = "eks-${local.cluster_name}"
-        Group = "mg_node_2"
-      }
-    }
+    # mg_1 = {
+    #   node_group_name = "managed-ondemand-2"
+    #   instance_types  = ["m5.large"]
+    #   capacity_type = "SPOT"
+    #   min_size        = 3
+    #   max_size        = 10
+    #   desired_size    = 3
+    #   subnet_ids      = module.vpc.public_subnets
+    #   create_launch_template = true
+    #   public_ip = true
+    #   k8s_labels = {
+    #     category = "static"
+    #   }
+    #   launch_template_tags = {
+    #     Name      = "eks-${local.cluster_name}"
+    #     Group = "mg_node_2"
+    #   }
+    # }
   }
   worker_additional_security_group_ids = [module.eks_blueprints.cluster_primary_security_group_id]
   # worker_additional_security_group_ids = [module.eks_blueprints.cluster_primary_security_group_id, aws_security_group.node_group_communicate.id]
   tags = local.tags
-}
-
-module "eks_blueprints_irsa_s3" {
-  source = "github.com/xjbdjay/terraform-aws-eks-blueprints/modules/irsa"
-
-  eks_cluster_id       = module.eks_blueprints.eks_cluster_id
-  eks_oidc_provider_arn    = module.eks_blueprints.eks_oidc_provider_arn
-
-  kubernetes_namespace = "fdb"
-  kubernetes_service_account = "s3-sa"
-  irsa_iam_policies = ["arn:aws-cn:iam::aws:policy/AmazonS3FullAccess"]
-  irsa_iam_role_name = "${local.name}_AmazonEKS_S3_ACCESS_Role"
 }
 
 module "eks_blueprints_kubernetes_addons" {
@@ -142,8 +121,8 @@ module "eks_blueprints_kubernetes_addons" {
     values = [
       <<-EOT
       image:
-        repository: registry.aliyuncs.com/google_containers/metrics-server
-        tag: v0.6.1
+        repository: 635304352795.dkr.ecr.cn-north-1.amazonaws.com.cn/metrics-server
+        tag: latest
       EOT
     ]
   }
@@ -168,43 +147,7 @@ module "eks_blueprints_kubernetes_addons" {
         type  = "string",
       }
     ]
-  }
-
-  tags = local.tags
 }
-
-#---------------------------------------------------------------
-# Supporting Resources
-#---------------------------------------------------------------
-
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 3.0"
-
-  name = local.name
-  cidr = local.vpc_cidr
-
-  azs             = local.azs
-  public_subnets  = [for k, v in local.azs : cidrsubnet(local.vpc_cidr, 8, k)]
-  private_subnets = [for k, v in local.azs : cidrsubnet(local.vpc_cidr, 8, k + 10)]
-
-  # Manage so we can name
-  manage_default_network_acl    = true
-  default_network_acl_tags      = { Name = "${local.name}-default" }
-  manage_default_route_table    = true
-  default_route_table_tags      = { Name = "${local.name}-default" }
-  manage_default_security_group = true
-  default_security_group_tags   = { Name = "${local.name}-default" }
-
-  public_subnet_tags = {
-    "kubernetes.io/cluster/${local.cluster_name}" = "shared"
-    "kubernetes.io/role/elb"                      = 1
-  }
-
-  private_subnet_tags = {
-    "kubernetes.io/cluster/${local.cluster_name}" = "shared"
-    "kubernetes.io/role/internal-elb"             = 1
-  }
 
   tags = local.tags
 }
